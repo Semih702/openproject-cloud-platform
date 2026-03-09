@@ -16,6 +16,7 @@ The initial focus is a clean and extensible network foundation for EKS-based dep
 ## Repository layout
 
 - `terraform/environments/prod`: production environment Terraform root module
+- `terraform/environments/bootstrap`: one-time backend bootstrap (S3 state bucket + DynamoDB lock table)
 - `terraform/modules/vpc`: reusable VPC module
 - `helm/openproject`: OpenProject wrapper chart
 - `helm/openproject/values/dev.yaml`: current starting values for development overrides
@@ -92,6 +93,15 @@ Recommended:
 
 - Keep direct local `terraform apply` disabled in team process.
 - Use pull requests for all Terraform edits so plan runs are visible before apply.
+
+## Terraform State Backend
+
+Production Terraform uses an S3 remote backend with DynamoDB locking.
+
+- Backend bucket: `openproject-cloud-platform-tfstate-211125458668`
+- Lock table: `openproject-cloud-platform-tf-locks`
+
+Bootstrap resources are managed by `terraform/environments/bootstrap` and should be applied once per AWS account.
 
 ## Future roadmap
 

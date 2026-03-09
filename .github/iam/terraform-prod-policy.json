@@ -11,9 +11,13 @@
         "iam:Get*",
         "iam:List*",
         "rds:Describe*",
+        "rds:ListTagsForResource",
         "secretsmanager:Describe*",
         "secretsmanager:GetResourcePolicy",
-        "autoscaling:Describe*"
+        "autoscaling:Describe*",
+        "s3:ListBucket",
+        "s3:GetBucketVersioning",
+        "dynamodb:DescribeTable"
       ],
       "Resource": "*"
     },
@@ -81,7 +85,14 @@
         "secretsmanager:DeleteSecret",
         "secretsmanager:PutSecretValue",
         "secretsmanager:TagResource",
-        "secretsmanager:UntagResource"
+        "secretsmanager:UntagResource",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:UpdateItem"
       ],
       "Resource": "*"
     },
