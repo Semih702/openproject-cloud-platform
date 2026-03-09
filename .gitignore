@@ -1,0 +1,10 @@
+
+# local kubeconfig
+kubeconfig-openproject
+
+
+# Terraform local state and cache
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
