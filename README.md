@@ -79,6 +79,24 @@ Required GitHub secrets:
 
 - `AWS_GITHUB_OIDC_ROLE_ARN`
 
+## Workflow Runbook
+
+Use GitHub Actions workflow `Terraform Prod` for controlled infrastructure changes.
+
+1. Run a manual plan:
+   - GitHub -> `Actions` -> `Terraform Prod` -> `Run workflow`
+   - Select `action = plan`
+2. Review plan output and artifacts.
+3. Run apply:
+   - GitHub -> `Actions` -> `Terraform Prod` -> `Run workflow`
+   - Select `action = apply`
+4. Approve the `prod` environment gate when prompted.
+
+Recommended:
+
+- Keep `apply` limited to `main` branch changes.
+- Use pull requests for all Terraform edits so plan runs are visible before apply.
+
 ## Future roadmap
 
 Planned additions include:
