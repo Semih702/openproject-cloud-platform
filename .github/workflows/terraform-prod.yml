@@ -65,7 +65,8 @@ jobs:
           path: ${{ env.TF_DIR }}/tfplan
 
   apply:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+    needs: validate-plan
     runs-on: ubuntu-latest
     environment: prod
     steps:
