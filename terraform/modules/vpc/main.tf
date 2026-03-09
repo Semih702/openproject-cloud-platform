@@ -2,6 +2,16 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+check "subnet_cidr_lengths" {
+  assert {
+    condition = (
+      length(var.public_subnet_cidrs) == var.az_count &&
+      length(var.private_subnet_cidrs) == var.az_count
+    )
+    error_message = "public_subnet_cidrs and private_subnet_cidrs lengths must match az_count."
+  }
+}
+
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
 

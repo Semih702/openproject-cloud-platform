@@ -22,21 +22,11 @@ variable "az_count" {
 variable "public_subnet_cidrs" {
   description = "CIDR blocks for public subnets in AZ order"
   type        = list(string)
-
-  validation {
-    condition     = length(var.public_subnet_cidrs) == var.az_count
-    error_message = "public_subnet_cidrs length must match az_count."
-  }
 }
 
 variable "private_subnet_cidrs" {
   description = "CIDR blocks for private subnets in AZ order"
   type        = list(string)
-
-  validation {
-    condition     = length(var.private_subnet_cidrs) == var.az_count
-    error_message = "private_subnet_cidrs length must match az_count."
-  }
 }
 
 variable "tags" {
