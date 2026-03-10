@@ -19,6 +19,7 @@
         "s3:GetBucketLocation",
         "s3:GetBucketVersioning",
         "s3:GetBucketTagging",
+        "s3:GetBucketPolicy",
         "s3:GetEncryptionConfiguration",
         "s3:GetBucketPublicAccessBlock",
         "dynamodb:DescribeTable"
@@ -116,6 +117,8 @@
         "s3:CreateBucket",
         "s3:DeleteBucket",
         "s3:PutBucketTagging",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
         "s3:PutBucketVersioning",
         "s3:PutEncryptionConfiguration",
         "s3:PutBucketPublicAccessBlock",
