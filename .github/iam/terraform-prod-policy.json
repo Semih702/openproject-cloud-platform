@@ -20,6 +20,7 @@
         "s3:GetBucketVersioning",
         "s3:GetBucketTagging",
         "s3:GetBucketPolicy",
+        "s3:GetBucketAcl",
         "s3:GetEncryptionConfiguration",
         "s3:GetBucketPublicAccessBlock",
         "dynamodb:DescribeTable"
@@ -116,6 +117,7 @@
         "secretsmanager:UntagResource",
         "s3:CreateBucket",
         "s3:DeleteBucket",
+        "s3:PutBucketAcl",
         "s3:PutBucketTagging",
         "s3:PutBucketPolicy",
         "s3:DeleteBucketPolicy",
