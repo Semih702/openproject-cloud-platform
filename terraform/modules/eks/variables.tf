@@ -95,3 +95,9 @@ variable "node_update_max_unavailable" {
   type        = number
   default     = 1
 }
+
+variable "enable_ebs_csi_addon" {
+  description = "Enable managed aws-ebs-csi-driver addon"
+  type        = bool
+  default     = true
+}
