@@ -86,10 +86,12 @@ The wrapper chart is located at `helm/plane` and environment overrides start wit
 GitHub Actions is configured to run Terraform using AWS OIDC federation instead of long-lived access keys.
 
 - Workflow file: `.github/workflows/terraform-prod.yml`
+- Bootstrap workflow: `.github/workflows/terraform-bootstrap.yml`
 - OIDC setup guide: `.github/README-OIDC.md`
 
 Behavior:
 
+- Bootstrap workflow manages remote-state prerequisites (S3 + DynamoDB)
 - Pull requests run `terraform init`, `validate`, and `plan`
 - Manual dispatch supports `plan` and `apply`
 - `apply` runs in GitHub Environment `prod` for approval-gated changes
@@ -107,6 +109,16 @@ Deployment is handled in a single pipeline:
 - Main push or manual `apply`: Terraform apply first, then Helm upgrade with `--atomic --wait`
 - Target cluster: `openproject-prod-eks`
 - Target namespace/release: `plane-dev`
+
+## Bootstrap First (Best Practice)
+
+For a fresh AWS account, run bootstrap once before prod:
+
+1. Run workflow `.github/workflows/terraform-bootstrap.yml` with `action=apply`
+2. This creates:
+   - S3 state bucket: `openproject-cloud-platform-tfstate-<account-id>`
+   - DynamoDB lock table: `openproject-cloud-platform-tf-locks`
+3. Then run normal prod workflow `.github/workflows/terraform-prod.yml`
 
 ## Workflow Runbook
 
@@ -126,10 +138,10 @@ Recommended:
 
 Production Terraform uses an S3 remote backend with DynamoDB locking.
 
-- Backend bucket: `openproject-cloud-platform-tfstate-211125458668`
+- Backend bucket pattern: `openproject-cloud-platform-tfstate-<account-id>`
 - Lock table: `openproject-cloud-platform-tf-locks`
 
-Bootstrap resources are managed by `terraform/environments/bootstrap` and should be applied once per AWS account.
+Bootstrap resources are managed by `terraform/environments/bootstrap` and should be applied once per AWS account (via bootstrap workflow).
 
 For portability across fresh AWS accounts, the CI workflow also ensures
 `AWSServiceRoleForRDS` exists before Terraform runs.

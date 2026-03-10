@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "state_bucket_name" {
   description = "S3 bucket name for Terraform remote state"
   type        = string
-  default     = "openproject-cloud-platform-tfstate-211125458668"
+  default     = ""
 }
 
 variable "lock_table_name" {

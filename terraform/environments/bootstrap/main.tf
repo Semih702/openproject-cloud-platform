@@ -1,8 +1,14 @@
+data "aws_caller_identity" "current" {}
+
+locals {
+  effective_state_bucket_name = var.state_bucket_name != "" ? var.state_bucket_name : "openproject-cloud-platform-tfstate-${data.aws_caller_identity.current.account_id}"
+}
+
 resource "aws_s3_bucket" "tf_state" {
-  bucket = var.state_bucket_name
+  bucket = local.effective_state_bucket_name
 
   tags = {
-    Name      = var.state_bucket_name
+    Name      = local.effective_state_bucket_name
     ManagedBy = "terraform"
     Purpose   = "terraform-state"
   }

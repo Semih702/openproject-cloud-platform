@@ -3,14 +3,16 @@ name: Terraform Prod
 on:
   pull_request:
     paths:
-      - 'terraform/**'
+      - 'terraform/environments/prod/**'
+      - 'terraform/modules/**'
       - 'helm/**'
       - '.github/workflows/terraform-prod.yml'
   push:
     branches:
       - main
     paths:
-      - 'terraform/**'
+      - 'terraform/environments/prod/**'
+      - 'terraform/modules/**'
       - 'helm/**'
       - '.github/workflows/terraform-prod.yml'
   workflow_dispatch:
@@ -71,7 +73,11 @@ jobs:
           fi
 
       - name: Terraform Init
-        run: terraform -chdir=${{ env.TF_DIR }} init -input=false
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          terraform -chdir=${{ env.TF_DIR }} init -input=false \
+            -backend-config="bucket=openproject-cloud-platform-tfstate-${ACCOUNT_ID}" \
+            -backend-config="dynamodb_table=openproject-cloud-platform-tf-locks"
 
       - name: Terraform Validate
         run: terraform -chdir=${{ env.TF_DIR }} validate
@@ -118,7 +124,11 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        run: terraform -chdir=${{ env.TF_DIR }} init -input=false
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          terraform -chdir=${{ env.TF_DIR }} init -input=false \
+            -backend-config="bucket=openproject-cloud-platform-tfstate-${ACCOUNT_ID}" \
+            -backend-config="dynamodb_table=openproject-cloud-platform-tf-locks"
 
       - name: Terraform Apply
         run: terraform -chdir=${{ env.TF_DIR }} apply -input=false -auto-approve

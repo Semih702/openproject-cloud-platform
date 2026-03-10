@@ -1,0 +1,85 @@
+name: Terraform Bootstrap
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/environments/bootstrap/**'
+      - '.github/workflows/terraform-bootstrap.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/environments/bootstrap/**'
+      - '.github/workflows/terraform-bootstrap.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Bootstrap action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+
+env:
+  TF_DIR: terraform/environments/bootstrap
+  AWS_REGION: eu-west-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform -chdir=${{ env.TF_DIR }} init -input=false
+
+      - name: Terraform Validate
+        run: terraform -chdir=${{ env.TF_DIR }} validate
+
+      - name: Terraform Plan
+        run: terraform -chdir=${{ env.TF_DIR }} plan -input=false -out=tfplan
+
+  apply:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform -chdir=${{ env.TF_DIR }} init -input=false
+
+      - name: Terraform Apply
+        run: terraform -chdir=${{ env.TF_DIR }} apply -input=false -auto-approve

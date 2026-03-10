@@ -1,6 +1,6 @@
 output "state_bucket_name" {
   description = "Remote state S3 bucket name"
-  value       = aws_s3_bucket.tf_state.bucket
+  value       = local.effective_state_bucket_name
 }
 
 output "lock_table_name" {
