@@ -35,7 +35,6 @@ env:
   HELM_CHART_DIR: helm/plane
   HELM_VALUES_FILE: helm/plane/values/dev.yaml
   PLANE_DOCSTORE_SECRET_NAME: plane-dev-doc-store-secrets
-  PLANE_S3_BUCKET: plane-dev-uploads
 
 concurrency:
   group: terraform-prod-main
@@ -147,29 +146,21 @@ jobs:
       - name: Ensure namespace exists
         run: kubectl get namespace "${{ env.K8S_NAMESPACE }}" || kubectl create namespace "${{ env.K8S_NAMESPACE }}"
 
-      - name: Validate Plane S3 Secrets
-        env:
-          PLANE_S3_ACCESS_KEY_ID: ${{ secrets.PLANE_S3_ACCESS_KEY_ID }}
-          PLANE_S3_SECRET_ACCESS_KEY: ${{ secrets.PLANE_S3_SECRET_ACCESS_KEY }}
-          PLANE_S3_ENDPOINT_URL: ${{ secrets.PLANE_S3_ENDPOINT_URL }}
+      - name: Read Terraform Outputs
+        id: tf_outputs
         run: |
-          set -euo pipefail
-          test -n "${PLANE_S3_ACCESS_KEY_ID}"
-          test -n "${PLANE_S3_SECRET_ACCESS_KEY}"
+          echo "plane_docstore_bucket_name=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_docstore_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "plane_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_irsa_role_arn)" >> "$GITHUB_OUTPUT"
 
       - name: Create/Update Plane Doc Store Secret
         env:
-          PLANE_S3_ACCESS_KEY_ID: ${{ secrets.PLANE_S3_ACCESS_KEY_ID }}
-          PLANE_S3_SECRET_ACCESS_KEY: ${{ secrets.PLANE_S3_SECRET_ACCESS_KEY }}
           PLANE_S3_ENDPOINT_URL: ${{ secrets.PLANE_S3_ENDPOINT_URL }}
         run: |
           kubectl create secret generic "${{ env.PLANE_DOCSTORE_SECRET_NAME }}" \
             -n "${{ env.K8S_NAMESPACE }}" \
             --from-literal=FILE_SIZE_LIMIT=5242880 \
-            --from-literal=AWS_S3_BUCKET_NAME="${{ env.PLANE_S3_BUCKET }}" \
+            --from-literal=AWS_S3_BUCKET_NAME="${{ steps.tf_outputs.outputs.plane_docstore_bucket_name }}" \
             --from-literal=USE_MINIO=0 \
-            --from-literal=AWS_ACCESS_KEY_ID="${PLANE_S3_ACCESS_KEY_ID}" \
-            --from-literal=AWS_SECRET_ACCESS_KEY="${PLANE_S3_SECRET_ACCESS_KEY}" \
             --from-literal=AWS_S3_ENDPOINT_URL="${PLANE_S3_ENDPOINT_URL}" \
             --from-literal=AWS_REGION="${{ env.AWS_REGION }}" \
             --dry-run=client -o yaml | kubectl apply -f -
@@ -182,3 +173,19 @@ jobs:
             --atomic \
             --wait \
             --timeout 20m
+
+      - name: Annotate Plane Service Account (IRSA)
+        run: |
+          kubectl annotate serviceaccount "${{ env.HELM_RELEASE_NAME }}-srv-account" \
+            -n "${{ env.K8S_NAMESPACE }}" \
+            eks.amazonaws.com/role-arn="${{ steps.tf_outputs.outputs.plane_irsa_role_arn }}" \
+            --overwrite
+
+      - name: Restart Plane Workloads After IRSA Annotation
+        run: |
+          for deploy in "${{ env.HELM_RELEASE_NAME }}-api-wl" "${{ env.HELM_RELEASE_NAME }}-live-wl" "${{ env.HELM_RELEASE_NAME }}-worker-wl" "${{ env.HELM_RELEASE_NAME }}-beat-worker-wl" "${{ env.HELM_RELEASE_NAME }}-web-wl" "${{ env.HELM_RELEASE_NAME }}-admin-wl" "${{ env.HELM_RELEASE_NAME }}-space-wl"; do
+            kubectl rollout restart "deployment/${deploy}" -n "${{ env.K8S_NAMESPACE }}" || true
+          done
+          for deploy in "${{ env.HELM_RELEASE_NAME }}-api-wl" "${{ env.HELM_RELEASE_NAME }}-live-wl" "${{ env.HELM_RELEASE_NAME }}-worker-wl" "${{ env.HELM_RELEASE_NAME }}-beat-worker-wl" "${{ env.HELM_RELEASE_NAME }}-web-wl" "${{ env.HELM_RELEASE_NAME }}-admin-wl" "${{ env.HELM_RELEASE_NAME }}-space-wl"; do
+            kubectl rollout status "deployment/${deploy}" -n "${{ env.K8S_NAMESPACE }}" --timeout=5m || true
+          done

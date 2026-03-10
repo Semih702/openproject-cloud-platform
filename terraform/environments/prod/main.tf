@@ -1,3 +1,9 @@
+data "aws_caller_identity" "current" {}
+
+locals {
+  plane_docstore_bucket_name = var.plane_docstore_bucket_name != "" ? var.plane_docstore_bucket_name : "${var.project_name}-${var.environment}-plane-docstore-${data.aws_caller_identity.current.account_id}"
+}
+
 module "vpc" {
   source = "../../modules/vpc"
 
@@ -66,4 +72,106 @@ module "rds_postgres" {
     Environment = var.environment
     ManagedBy   = "terraform"
   }
+}
+
+resource "aws_s3_bucket" "plane_docstore" {
+  bucket = local.plane_docstore_bucket_name
+
+  tags = {
+    Name        = local.plane_docstore_bucket_name
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+    Purpose     = "plane-docstore"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "plane_docstore" {
+  bucket = aws_s3_bucket.plane_docstore.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "plane_docstore" {
+  bucket = aws_s3_bucket.plane_docstore.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "plane_docstore" {
+  bucket = aws_s3_bucket.plane_docstore.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_iam_role" "plane_irsa" {
+  name = "${var.project_name}-${var.environment}-plane-irsa-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = module.eks.oidc_provider_arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${module.eks.oidc_issuer_hostpath}:aud" = "sts.amazonaws.com"
+            "${module.eks.oidc_issuer_hostpath}:sub" = "system:serviceaccount:${var.plane_namespace}:${var.plane_service_account_name}"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-plane-irsa-role"
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_iam_policy" "plane_docstore_s3" {
+  name        = "${var.project_name}-${var.environment}-plane-docstore-s3"
+  description = "S3 access policy for Plane doc-store via IRSA"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = aws_s3_bucket.plane_docstore.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "${aws_s3_bucket.plane_docstore.arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "plane_docstore_s3" {
+  role       = aws_iam_role.plane_irsa.name
+  policy_arn = aws_iam_policy.plane_docstore_s3.arn
 }

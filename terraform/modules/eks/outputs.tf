@@ -22,3 +22,13 @@ output "node_group_name" {
   description = "EKS managed node group name"
   value       = aws_eks_node_group.this.node_group_name
 }
+
+output "oidc_provider_arn" {
+  description = "IAM OIDC provider ARN for this EKS cluster"
+  value       = aws_iam_openid_connect_provider.eks.arn
+}
+
+output "oidc_issuer_hostpath" {
+  description = "OIDC issuer hostpath (without https://)"
+  value       = local.oidc_issuer_hostpath
+}

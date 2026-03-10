@@ -212,3 +212,21 @@ variable "rds_allowed_cidr_blocks" {
   type        = list(string)
   default     = ["172.26.0.0/16"]
 }
+
+variable "plane_namespace" {
+  description = "Kubernetes namespace where Plane is deployed"
+  type        = string
+  default     = "plane-dev"
+}
+
+variable "plane_service_account_name" {
+  description = "Plane Kubernetes service account name used by workloads"
+  type        = string
+  default     = "plane-dev-srv-account"
+}
+
+variable "plane_docstore_bucket_name" {
+  description = "Optional override for Plane doc-store S3 bucket name"
+  type        = string
+  default     = ""
+}

@@ -72,3 +72,13 @@ output "rds_credentials_secret_arn" {
   description = "Secrets Manager ARN containing PostgreSQL credentials"
   value       = module.rds_postgres.credentials_secret_arn
 }
+
+output "plane_docstore_bucket_name" {
+  description = "Plane doc-store S3 bucket name"
+  value       = aws_s3_bucket.plane_docstore.bucket
+}
+
+output "plane_irsa_role_arn" {
+  description = "IAM role ARN used by Plane service account via IRSA"
+  value       = aws_iam_role.plane_irsa.arn
+}
