@@ -101,3 +101,9 @@ variable "enable_ebs_csi_addon" {
   type        = bool
   default     = true
 }
+
+variable "cluster_admin_principal_arns" {
+  description = "IAM principal ARNs to grant EKS cluster-admin access"
+  type        = list(string)
+  default     = []
+}

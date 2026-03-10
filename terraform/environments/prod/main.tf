@@ -24,6 +24,7 @@ module "eks" {
   endpoint_private_access         = var.eks_endpoint_private_access
   endpoint_public_access_cidrs    = var.eks_endpoint_public_access_cidrs
   bootstrap_cluster_creator_admin = var.eks_bootstrap_cluster_creator_admin
+  cluster_admin_principal_arns    = var.eks_cluster_admin_principal_arns
   node_group_name                 = var.eks_node_group_name
   node_subnet_ids                 = module.vpc.private_subnet_ids
   node_instance_types             = var.eks_node_instance_types
