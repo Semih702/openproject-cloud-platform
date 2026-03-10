@@ -98,13 +98,13 @@ Required GitHub secrets:
 
 - `AWS_GITHUB_OIDC_ROLE_ARN`
 
-## Helm Plane Deploy Workflow
+## Unified Terraform + Helm Workflow
 
-Plane deploy is automated via GitHub Actions:
+Deployment is handled in a single pipeline:
 
-- Workflow file: `.github/workflows/helm-plane-dev.yml`
-- Trigger: push to `main` when `helm/**` changes
-- Also supports manual run via `workflow_dispatch`
+- Workflow file: `.github/workflows/terraform-prod.yml`
+- PR: Terraform `init/validate/plan` + Helm `dependency update/lint/template`
+- Main push or manual `apply`: Terraform apply first, then Helm upgrade with `--atomic --wait`
 - Target cluster: `openproject-prod-eks`
 - Target namespace/release: `plane-dev`
 
