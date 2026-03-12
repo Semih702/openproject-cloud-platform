@@ -159,7 +159,12 @@ jobs:
       - name: Resolve Node Group ASG For Cluster Autoscaler
         id: nodegroup_scaling
         run: |
+          set -euo pipefail
           NODEGROUP_NAME="${{ steps.tf_outputs.outputs.eks_node_group_name }}"
+          if [ -z "${NODEGROUP_NAME}" ]; then
+            echo "eks_node_group_name output is empty."
+            exit 1
+          fi
           ASG_NAME=$(aws eks describe-nodegroup \
             --cluster-name "${{ env.EKS_CLUSTER_NAME }}" \
             --nodegroup-name "${NODEGROUP_NAME}" \
@@ -178,6 +183,10 @@ jobs:
             --region "${{ env.AWS_REGION }}" \
             --query 'nodegroup.scalingConfig.maxSize' \
             --output text)
+          if [ -z "${ASG_NAME}" ] || [ "${ASG_NAME}" = "None" ]; then
+            echo "Unable to resolve ASG name for node group: ${NODEGROUP_NAME}"
+            exit 1
+          fi
           echo "asg_name=${ASG_NAME}" >> "$GITHUB_OUTPUT"
           echo "min_size=${MIN_SIZE}" >> "$GITHUB_OUTPUT"
           echo "max_size=${MAX_SIZE}" >> "$GITHUB_OUTPUT"
@@ -202,6 +211,7 @@ jobs:
             --set clusterName="${{ env.EKS_CLUSTER_NAME }}" \
             --set serviceAccount.create=true \
             --set serviceAccount.name=aws-load-balancer-controller \
+            --set enableServiceMutatorWebhook=false \
             --set-string serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn="${{ steps.tf_outputs.outputs.aws_load_balancer_controller_irsa_role_arn }}" \
             --set region="${{ env.AWS_REGION }}" \
             --set vpcId="${{ steps.tf_outputs.outputs.vpc_id }}" \
@@ -232,6 +242,7 @@ jobs:
 
       - name: Install/Upgrade Cluster Autoscaler
         run: |
+          set -euo pipefail
           helm repo add autoscaler https://kubernetes.github.io/autoscaler
           helm repo update
           helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
@@ -248,7 +259,15 @@ jobs:
             --set-string extraArgs.balance-similar-node-groups=true \
             --wait \
             --timeout 10m
-          kubectl rollout status deployment/cluster-autoscaler -n kube-system --timeout=5m
+          DEPLOYS="$(kubectl get deployment -n kube-system -l app.kubernetes.io/instance=cluster-autoscaler,app.kubernetes.io/name=aws-cluster-autoscaler -o name)"
+          if [ -z "${DEPLOYS}" ]; then
+            echo "No cluster-autoscaler deployment found after helm install."
+            kubectl get deployment -n kube-system
+            exit 1
+          fi
+          for deploy in ${DEPLOYS}; do
+            kubectl rollout status "${deploy}" -n kube-system --timeout=5m
+          done
 
       - name: Adopt Existing Plane Doc Store Secret (if present)
         run: |
