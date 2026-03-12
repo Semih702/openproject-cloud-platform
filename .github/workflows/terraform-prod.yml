@@ -150,9 +150,48 @@ jobs:
         id: tf_outputs
         run: |
           echo "vpc_id=$(terraform -chdir=${{ env.TF_DIR }} output -raw vpc_id)" >> "$GITHUB_OUTPUT"
+          echo "eks_node_group_name=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_node_group_name)" >> "$GITHUB_OUTPUT"
           echo "plane_docstore_bucket_name=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_docstore_bucket_name)" >> "$GITHUB_OUTPUT"
           echo "plane_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_irsa_role_arn)" >> "$GITHUB_OUTPUT"
           echo "aws_load_balancer_controller_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_aws_load_balancer_controller_irsa_role_arn)" >> "$GITHUB_OUTPUT"
+          echo "cluster_autoscaler_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_cluster_autoscaler_irsa_role_arn)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Node Group ASG For Cluster Autoscaler
+        id: nodegroup_scaling
+        run: |
+          NODEGROUP_NAME="${{ steps.tf_outputs.outputs.eks_node_group_name }}"
+          ASG_NAME=$(aws eks describe-nodegroup \
+            --cluster-name "${{ env.EKS_CLUSTER_NAME }}" \
+            --nodegroup-name "${NODEGROUP_NAME}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'nodegroup.resources.autoScalingGroups[0].name' \
+            --output text)
+          MIN_SIZE=$(aws eks describe-nodegroup \
+            --cluster-name "${{ env.EKS_CLUSTER_NAME }}" \
+            --nodegroup-name "${NODEGROUP_NAME}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'nodegroup.scalingConfig.minSize' \
+            --output text)
+          MAX_SIZE=$(aws eks describe-nodegroup \
+            --cluster-name "${{ env.EKS_CLUSTER_NAME }}" \
+            --nodegroup-name "${NODEGROUP_NAME}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'nodegroup.scalingConfig.maxSize' \
+            --output text)
+          echo "asg_name=${ASG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "min_size=${MIN_SIZE}" >> "$GITHUB_OUTPUT"
+          echo "max_size=${MAX_SIZE}" >> "$GITHUB_OUTPUT"
+
+      - name: Install/Upgrade Metrics Server
+        run: |
+          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+          helm repo update
+          helm upgrade --install metrics-server metrics-server/metrics-server \
+            --namespace kube-system \
+            --set "args[0]=--kubelet-insecure-tls" \
+            --wait \
+            --timeout 10m
+          kubectl rollout status deployment/metrics-server -n kube-system --timeout=5m
 
       - name: Install/Upgrade AWS Load Balancer Controller
         run: |
@@ -167,8 +206,49 @@ jobs:
             --set region="${{ env.AWS_REGION }}" \
             --set vpcId="${{ steps.tf_outputs.outputs.vpc_id }}" \
             --wait \
+            --wait-for-jobs \
             --timeout 10m
           kubectl rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=5m
+
+      - name: Ensure AWS LB Webhook CA Bundle Is Synced
+        run: |
+          set -euo pipefail
+
+          # aws-load-balancer-controller chart stores webhook cert here in current chart versions.
+          CA_BUNDLE="$(kubectl get secret aws-load-balancer-tls -n kube-system -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)"
+          if [ -z "${CA_BUNDLE}" ]; then
+            echo "aws-load-balancer-tls secret not found; skipping CA sync."
+            exit 0
+          fi
+
+          # Keep webhook configuration CA bundles aligned with serving cert CA to avoid x509 mismatch races.
+          kubectl get validatingwebhookconfiguration aws-load-balancer-webhook -o json \
+            | jq --arg ca "${CA_BUNDLE}" '.webhooks |= map(.clientConfig.caBundle=$ca)' \
+            | kubectl apply -f -
+
+          kubectl get mutatingwebhookconfiguration aws-load-balancer-webhook -o json \
+            | jq --arg ca "${CA_BUNDLE}" '.webhooks |= map(.clientConfig.caBundle=$ca)' \
+            | kubectl apply -f -
+
+      - name: Install/Upgrade Cluster Autoscaler
+        run: |
+          helm repo add autoscaler https://kubernetes.github.io/autoscaler
+          helm repo update
+          helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
+            --namespace kube-system \
+            --set cloudProvider=aws \
+            --set awsRegion="${{ env.AWS_REGION }}" \
+            --set rbac.serviceAccount.create=true \
+            --set rbac.serviceAccount.name=cluster-autoscaler \
+            --set-string rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn="${{ steps.tf_outputs.outputs.cluster_autoscaler_irsa_role_arn }}" \
+            --set "autoscalingGroups[0].name=${{ steps.nodegroup_scaling.outputs.asg_name }}" \
+            --set "autoscalingGroups[0].minSize=${{ steps.nodegroup_scaling.outputs.min_size }}" \
+            --set "autoscalingGroups[0].maxSize=${{ steps.nodegroup_scaling.outputs.max_size }}" \
+            --set-string extraArgs.skip-nodes-with-system-pods=false \
+            --set-string extraArgs.balance-similar-node-groups=true \
+            --wait \
+            --timeout 10m
+          kubectl rollout status deployment/cluster-autoscaler -n kube-system --timeout=5m
 
       - name: Adopt Existing Plane Doc Store Secret (if present)
         run: |
@@ -192,8 +272,9 @@ jobs:
             --set-string plane-ce.env.docstore_bucket="${{ steps.tf_outputs.outputs.plane_docstore_bucket_name }}" \
             --set-string plane-ce.env.aws_region="${{ env.AWS_REGION }}" \
             --set-string plane-ce.env.aws_s3_endpoint_url="${{ secrets.PLANE_S3_ENDPOINT_URL }}" \
-            --atomic \
+            --rollback-on-failure \
             --wait \
+            --wait-for-jobs \
             --timeout 20m
 
       - name: Annotate Plane Service Account (IRSA)
