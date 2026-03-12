@@ -171,12 +171,22 @@ jobs:
             fi
           }
 
+          output_raw_or_empty() {
+            local name="$1"
+            terraform -chdir=${{ env.TF_DIR }} output -raw "$name" 2>/dev/null || true
+          }
+
           VPC_ID="$(terraform -chdir=${{ env.TF_DIR }} output -raw vpc_id)"
           NODE_GROUP_NAME="$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_node_group_name)"
           DOCSTORE_BUCKET="$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_docstore_bucket_name)"
           PLANE_IRSA_ROLE_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_irsa_role_arn)"
           AWS_LBC_IRSA_ROLE_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_aws_load_balancer_controller_irsa_role_arn)"
-          CLUSTER_AUTOSCALER_IRSA_ROLE_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_cluster_autoscaler_irsa_role_arn)"
+          CLUSTER_AUTOSCALER_IRSA_ROLE_ARN="$(output_raw_or_empty eks_cluster_autoscaler_irsa_role_arn)"
+          if [ -z "$CLUSTER_AUTOSCALER_IRSA_ROLE_ARN" ]; then
+            ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+            CLUSTER_AUTOSCALER_IRSA_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${{ env.EKS_CLUSTER_NAME }}-cluster-autoscaler-role"
+            echo "eks_cluster_autoscaler_irsa_role_arn output not found in state; using fallback ARN: ${CLUSTER_AUTOSCALER_IRSA_ROLE_ARN}"
+          fi
 
           require_nonempty "vpc_id" "$VPC_ID"
           require_nonempty "eks_node_group_name" "$NODE_GROUP_NAME"
