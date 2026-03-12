@@ -153,11 +153,19 @@ jobs:
           echo "eks_node_group_name=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_node_group_name)" >> "$GITHUB_OUTPUT"
           echo "plane_docstore_bucket_name=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_docstore_bucket_name)" >> "$GITHUB_OUTPUT"
           echo "plane_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_irsa_role_arn)" >> "$GITHUB_OUTPUT"
+          echo "rds_credentials_secret_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw rds_credentials_secret_arn)" >> "$GITHUB_OUTPUT"
+          echo "rabbitmq_credentials_secret_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw rabbitmq_credentials_secret_arn)" >> "$GITHUB_OUTPUT"
+          echo "redis_credentials_secret_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw redis_credentials_secret_arn)" >> "$GITHUB_OUTPUT"
           echo "aws_load_balancer_controller_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_aws_load_balancer_controller_irsa_role_arn)" >> "$GITHUB_OUTPUT"
-          echo "cluster_autoscaler_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_cluster_autoscaler_irsa_role_arn)" >> "$GITHUB_OUTPUT"
+          if terraform -chdir=${{ env.TF_DIR }} output -raw eks_cluster_autoscaler_irsa_role_arn >/dev/null 2>&1; then
+            echo "cluster_autoscaler_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_cluster_autoscaler_irsa_role_arn)" >> "$GITHUB_OUTPUT"
+          else
+            echo "cluster_autoscaler_irsa_role_arn=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Resolve Node Group ASG For Cluster Autoscaler
         id: nodegroup_scaling
+        if: steps.tf_outputs.outputs.cluster_autoscaler_irsa_role_arn != ''
         run: |
           set -euo pipefail
           NODEGROUP_NAME="${{ steps.tf_outputs.outputs.eks_node_group_name }}"
@@ -241,6 +249,7 @@ jobs:
             | kubectl apply -f -
 
       - name: Install/Upgrade Cluster Autoscaler
+        if: steps.tf_outputs.outputs.cluster_autoscaler_irsa_role_arn != ''
         run: |
           set -euo pipefail
           helm repo add autoscaler https://kubernetes.github.io/autoscaler
@@ -283,11 +292,86 @@ jobs:
               --overwrite
           fi
 
+      - name: Build Runtime Helm Values (RDS + Amazon MQ + ElastiCache)
+        id: plane_runtime_values
+        run: |
+          set -euo pipefail
+
+          RDS_SECRET_ARN="${{ steps.tf_outputs.outputs.rds_credentials_secret_arn }}"
+          RABBIT_SECRET_ARN="${{ steps.tf_outputs.outputs.rabbitmq_credentials_secret_arn }}"
+          REDIS_SECRET_ARN="${{ steps.tf_outputs.outputs.redis_credentials_secret_arn }}"
+
+          if [ -z "${RDS_SECRET_ARN}" ] || [ -z "${RABBIT_SECRET_ARN}" ] || [ -z "${REDIS_SECRET_ARN}" ]; then
+            echo "RDS/RabbitMQ/Redis credentials secret outputs are empty."
+            exit 1
+          fi
+
+          RDS_SECRET_JSON="$(aws secretsmanager get-secret-value \
+            --secret-id "${RDS_SECRET_ARN}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'SecretString' \
+            --output text)"
+          RABBIT_SECRET_JSON="$(aws secretsmanager get-secret-value \
+            --secret-id "${RABBIT_SECRET_ARN}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'SecretString' \
+            --output text)"
+          REDIS_SECRET_JSON="$(aws secretsmanager get-secret-value \
+            --secret-id "${REDIS_SECRET_ARN}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'SecretString' \
+            --output text)"
+
+          DB_HOST="$(echo "${RDS_SECRET_JSON}" | jq -er '.host')"
+          DB_PORT="$(echo "${RDS_SECRET_JSON}" | jq -er '.port')"
+          DB_NAME="$(echo "${RDS_SECRET_JSON}" | jq -er '.database')"
+          DB_USER="$(echo "${RDS_SECRET_JSON}" | jq -er '.username')"
+          DB_PASS="$(echo "${RDS_SECRET_JSON}" | jq -er '.password')"
+          RABBIT_ENDPOINT="$(echo "${RABBIT_SECRET_JSON}" | jq -er '.endpoint')"
+          RABBIT_USERNAME="$(echo "${RABBIT_SECRET_JSON}" | jq -er '.username')"
+          RABBIT_PASSWORD="$(echo "${RABBIT_SECRET_JSON}" | jq -er '.password')"
+          REDIS_ENDPOINT="$(echo "${REDIS_SECRET_JSON}" | jq -er '.endpoint')"
+          REDIS_PORT="$(echo "${REDIS_SECRET_JSON}" | jq -er '.port')"
+          REDIS_AUTH_TOKEN="$(echo "${REDIS_SECRET_JSON}" | jq -er '.auth_token')"
+
+          if [ -z "${DB_HOST}" ] || [ -z "${DB_PORT}" ] || [ -z "${DB_NAME}" ] || [ -z "${DB_USER}" ] || [ -z "${DB_PASS}" ] || [ -z "${RABBIT_ENDPOINT}" ] || [ -z "${RABBIT_USERNAME}" ] || [ -z "${RABBIT_PASSWORD}" ] || [ -z "${REDIS_ENDPOINT}" ] || [ -z "${REDIS_PORT}" ] || [ -z "${REDIS_AUTH_TOKEN}" ]; then
+            echo "Managed service secrets are missing required fields."
+            exit 1
+          fi
+
+          DB_USER_URI="$(printf '%s' "${DB_USER}" | jq -sRr @uri)"
+          DB_PASS_URI="$(printf '%s' "${DB_PASS}" | jq -sRr @uri)"
+          RABBIT_HOSTPORT="${RABBIT_ENDPOINT#*://}"
+          RABBIT_USERNAME_URI="$(printf '%s' "${RABBIT_USERNAME}" | jq -sRr @uri)"
+          RABBIT_PASSWORD_URI="$(printf '%s' "${RABBIT_PASSWORD}" | jq -sRr @uri)"
+          REDIS_AUTH_TOKEN_URI="$(printf '%s' "${REDIS_AUTH_TOKEN}" | jq -sRr @uri)"
+
+          PGDB_REMOTE_URL="postgresql://${DB_USER_URI}:${DB_PASS_URI}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+          AMQP_URL="amqps://${RABBIT_USERNAME_URI}:${RABBIT_PASSWORD_URI}@${RABBIT_HOSTPORT}/"
+          REDIS_URL="rediss://:${REDIS_AUTH_TOKEN_URI}@${REDIS_ENDPOINT}:${REDIS_PORT}/0"
+
+          cat > /tmp/plane-runtime-values.yaml <<EOF
+          plane-ce:
+            postgres:
+              local_setup: false
+            redis:
+              local_setup: false
+            rabbitmq:
+              local_setup: false
+              external_rabbitmq_url: "${AMQP_URL}"
+            env:
+              pgdb_remote_url: "${PGDB_REMOTE_URL}"
+              remote_redis_url: "${REDIS_URL}"
+          EOF
+
+          echo "runtime_values_file=/tmp/plane-runtime-values.yaml" >> "$GITHUB_OUTPUT"
+
       - name: Helm Upgrade/Install
         run: |
           helm upgrade --install "${{ env.HELM_RELEASE_NAME }}" "${{ env.HELM_CHART_DIR }}" \
             --namespace "${{ env.K8S_NAMESPACE }}" \
             --values "${{ env.HELM_VALUES_FILE }}" \
+            --values "${{ steps.plane_runtime_values.outputs.runtime_values_file }}" \
             --set-string plane-ce.env.docstore_bucket="${{ steps.tf_outputs.outputs.plane_docstore_bucket_name }}" \
             --set-string plane-ce.env.aws_region="${{ env.AWS_REGION }}" \
             --set-string plane-ce.env.aws_s3_endpoint_url="${{ secrets.PLANE_S3_ENDPOINT_URL }}" \

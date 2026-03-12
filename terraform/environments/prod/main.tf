@@ -78,6 +78,49 @@ module "rds_postgres" {
   }
 }
 
+module "rabbitmq_amazonmq" {
+  source = "../../modules/amazonmq-rabbitmq"
+
+  name                       = "${var.project_name}-${var.environment}-rabbitmq"
+  vpc_id                     = module.vpc.vpc_id
+  subnet_ids                 = module.vpc.private_subnet_ids
+  allowed_cidr_blocks        = var.rabbitmq_allowed_cidr_blocks
+  engine_version             = var.rabbitmq_engine_version
+  host_instance_type         = var.rabbitmq_host_instance_type
+  deployment_mode            = var.rabbitmq_deployment_mode
+  publicly_accessible        = var.rabbitmq_publicly_accessible
+  auto_minor_version_upgrade = var.rabbitmq_auto_minor_version_upgrade
+  username                   = var.rabbitmq_username
+  password                   = var.rabbitmq_password
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+module "redis_elasticache" {
+  source = "../../modules/elasticache-redis"
+
+  name                = "${var.project_name}-${var.environment}-redis"
+  vpc_id              = module.vpc.vpc_id
+  subnet_ids          = module.vpc.private_subnet_ids
+  allowed_cidr_blocks = var.redis_allowed_cidr_blocks
+  node_type           = var.redis_node_type
+  engine_version      = var.redis_engine_version
+  port                = var.redis_port
+  num_cache_clusters  = var.redis_num_cache_clusters
+  apply_immediately   = var.redis_apply_immediately
+  auth_token          = var.redis_auth_token
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_s3_bucket" "plane_docstore" {
   bucket = local.plane_docstore_bucket_name
 

@@ -348,9 +348,9 @@ To move this repository closer to production-grade best practices, implement the
    - Add secret rotation policy and runbook.
 
 3. Managed data services migration
-   - PostgreSQL: migrate from in-cluster `pgdb` (EBS PVC) to Amazon RDS PostgreSQL.
-   - RabbitMQ: prefer Amazon MQ for RabbitMQ as the most compatible managed replacement.
-   - Redis: prefer Amazon ElastiCache for Redis for production HA/backup operations.
+   - PostgreSQL: migrated to Amazon RDS PostgreSQL with CI-injected `pgdb_remote_url`.
+   - RabbitMQ: migrated to Amazon MQ for RabbitMQ with CI-injected `external_rabbitmq_url`.
+   - Redis: migrated to Amazon ElastiCache with CI-injected `remote_redis_url`.
    - Note: Amazon SQS is an option only with app-level queue integration changes; it is not a direct RabbitMQ drop-in.
 
 4. DNS and TLS hardening

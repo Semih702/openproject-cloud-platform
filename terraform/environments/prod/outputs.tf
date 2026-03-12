@@ -78,6 +78,41 @@ output "rds_credentials_secret_arn" {
   value       = module.rds_postgres.credentials_secret_arn
 }
 
+output "rabbitmq_broker_id" {
+  description = "Amazon MQ broker ID"
+  value       = module.rabbitmq_amazonmq.broker_id
+}
+
+output "rabbitmq_broker_endpoint" {
+  description = "Amazon MQ RabbitMQ endpoint"
+  value       = module.rabbitmq_amazonmq.broker_endpoint
+}
+
+output "rabbitmq_credentials_secret_arn" {
+  description = "Secrets Manager ARN containing RabbitMQ credentials"
+  value       = module.rabbitmq_amazonmq.credentials_secret_arn
+}
+
+output "redis_replication_group_id" {
+  description = "ElastiCache Redis replication group ID"
+  value       = module.redis_elasticache.replication_group_id
+}
+
+output "redis_primary_endpoint_address" {
+  description = "ElastiCache Redis primary endpoint address"
+  value       = module.redis_elasticache.primary_endpoint_address
+}
+
+output "redis_port" {
+  description = "ElastiCache Redis port"
+  value       = module.redis_elasticache.port
+}
+
+output "redis_credentials_secret_arn" {
+  description = "Secrets Manager ARN containing Redis endpoint and auth token"
+  value       = module.redis_elasticache.credentials_secret_arn
+}
+
 output "plane_docstore_bucket_name" {
   description = "Plane doc-store S3 bucket name"
   value       = aws_s3_bucket.plane_docstore.bucket
