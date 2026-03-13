@@ -149,19 +149,73 @@ jobs:
       - name: Read Terraform Outputs
         id: tf_outputs
         run: |
-          echo "vpc_id=$(terraform -chdir=${{ env.TF_DIR }} output -raw vpc_id)" >> "$GITHUB_OUTPUT"
-          echo "eks_node_group_name=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_node_group_name)" >> "$GITHUB_OUTPUT"
-          echo "plane_docstore_bucket_name=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_docstore_bucket_name)" >> "$GITHUB_OUTPUT"
-          echo "plane_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_irsa_role_arn)" >> "$GITHUB_OUTPUT"
-          echo "rds_credentials_secret_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw rds_credentials_secret_arn)" >> "$GITHUB_OUTPUT"
-          echo "rabbitmq_credentials_secret_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw rabbitmq_credentials_secret_arn)" >> "$GITHUB_OUTPUT"
-          echo "redis_credentials_secret_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw redis_credentials_secret_arn)" >> "$GITHUB_OUTPUT"
-          echo "aws_load_balancer_controller_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_aws_load_balancer_controller_irsa_role_arn)" >> "$GITHUB_OUTPUT"
-          if terraform -chdir=${{ env.TF_DIR }} output -raw eks_cluster_autoscaler_irsa_role_arn >/dev/null 2>&1; then
-            echo "cluster_autoscaler_irsa_role_arn=$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_cluster_autoscaler_irsa_role_arn)" >> "$GITHUB_OUTPUT"
-          else
-            echo "cluster_autoscaler_irsa_role_arn=" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          require_nonempty() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "Required Terraform output '$name' is empty."
+              exit 1
+            fi
+          }
+
+          require_iam_role_arn() {
+            local name="$1"
+            local value="$2"
+            if [[ ! "$value" =~ ^arn:aws:iam::[0-9]{12}:role/.+ ]]; then
+              echo "Terraform output '$name' is not a valid IAM role ARN: '$value'"
+              exit 1
+            fi
+          }
+
+          output_raw_or_empty() {
+            local name="$1"
+            terraform -chdir=${{ env.TF_DIR }} output -raw "$name" 2>/dev/null || true
+          }
+
+          VPC_ID="$(terraform -chdir=${{ env.TF_DIR }} output -raw vpc_id)"
+          NODE_GROUP_NAME="$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_node_group_name)"
+          DOCSTORE_BUCKET="$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_docstore_bucket_name)"
+          PLANE_IRSA_ROLE_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw plane_irsa_role_arn)"
+          RDS_SECRET_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw rds_credentials_secret_arn)"
+          RABBITMQ_SECRET_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw rabbitmq_credentials_secret_arn)"
+          REDIS_SECRET_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw redis_credentials_secret_arn)"
+          AWS_LBC_IRSA_ROLE_ARN="$(terraform -chdir=${{ env.TF_DIR }} output -raw eks_aws_load_balancer_controller_irsa_role_arn)"
+          CLUSTER_AUTOSCALER_IRSA_ROLE_ARN="$(output_raw_or_empty eks_cluster_autoscaler_irsa_role_arn)"
+
+          if [ -z "$CLUSTER_AUTOSCALER_IRSA_ROLE_ARN" ]; then
+            ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+            CLUSTER_AUTOSCALER_IRSA_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${{ env.EKS_CLUSTER_NAME }}-cluster-autoscaler-role"
+            echo "eks_cluster_autoscaler_irsa_role_arn output not found in state; using fallback ARN: ${CLUSTER_AUTOSCALER_IRSA_ROLE_ARN}"
           fi
+
+          require_nonempty "vpc_id" "$VPC_ID"
+          require_nonempty "eks_node_group_name" "$NODE_GROUP_NAME"
+          require_nonempty "plane_docstore_bucket_name" "$DOCSTORE_BUCKET"
+          require_nonempty "rds_credentials_secret_arn" "$RDS_SECRET_ARN"
+          require_nonempty "rabbitmq_credentials_secret_arn" "$RABBITMQ_SECRET_ARN"
+          require_nonempty "redis_credentials_secret_arn" "$REDIS_SECRET_ARN"
+          require_iam_role_arn "plane_irsa_role_arn" "$PLANE_IRSA_ROLE_ARN"
+          require_iam_role_arn "eks_aws_load_balancer_controller_irsa_role_arn" "$AWS_LBC_IRSA_ROLE_ARN"
+          require_iam_role_arn "eks_cluster_autoscaler_irsa_role_arn" "$CLUSTER_AUTOSCALER_IRSA_ROLE_ARN"
+
+          echo "vpc_id=$VPC_ID" >> "$GITHUB_OUTPUT"
+          echo "eks_node_group_name=$NODE_GROUP_NAME" >> "$GITHUB_OUTPUT"
+          echo "plane_docstore_bucket_name=$DOCSTORE_BUCKET" >> "$GITHUB_OUTPUT"
+          echo "plane_irsa_role_arn=$PLANE_IRSA_ROLE_ARN" >> "$GITHUB_OUTPUT"
+          echo "rds_credentials_secret_arn=$RDS_SECRET_ARN" >> "$GITHUB_OUTPUT"
+          echo "rabbitmq_credentials_secret_arn=$RABBITMQ_SECRET_ARN" >> "$GITHUB_OUTPUT"
+          echo "redis_credentials_secret_arn=$REDIS_SECRET_ARN" >> "$GITHUB_OUTPUT"
+          echo "aws_load_balancer_controller_irsa_role_arn=$AWS_LBC_IRSA_ROLE_ARN" >> "$GITHUB_OUTPUT"
+          echo "cluster_autoscaler_irsa_role_arn=$CLUSTER_AUTOSCALER_IRSA_ROLE_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Cluster Autoscaler IRSA Role Exists
+        run: |
+          set -euo pipefail
+          ROLE_ARN="${{ steps.tf_outputs.outputs.cluster_autoscaler_irsa_role_arn }}"
+          ROLE_NAME="${ROLE_ARN##*/}"
+          aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text >/dev/null
 
       - name: Resolve Node Group ASG For Cluster Autoscaler
         id: nodegroup_scaling
