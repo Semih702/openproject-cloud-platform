@@ -71,7 +71,7 @@ variable "credentials_secret_name_prefix" {
 }
 
 variable "credentials_secret_recovery_window_in_days" {
-  description = "Recovery window for credentials secret deletion. Ignored when force-delete is enabled."
+  description = "Recovery window (7-30 days) for credentials secret deletion."
   type        = number
   default     = 7
 
@@ -81,14 +81,9 @@ variable "credentials_secret_recovery_window_in_days" {
   }
 }
 
-variable "credentials_secret_force_delete_without_recovery" {
-  description = "Force-delete credentials secret immediately to avoid pending-deletion name lock."
-  type        = bool
-  default     = false
-}
-
 variable "tags" {
   description = "Common tags"
   type        = map(string)
   default     = {}
 }
+

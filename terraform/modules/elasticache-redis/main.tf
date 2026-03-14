@@ -70,10 +70,9 @@ resource "aws_elasticache_replication_group" "this" {
 }
 
 resource "aws_secretsmanager_secret" "credentials" {
-  name                          = var.credentials_secret_name
-  name_prefix                   = var.credentials_secret_name == null ? local.credentials_secret_name_prefix : null
-  recovery_window_in_days       = var.credentials_secret_force_delete_without_recovery ? null : var.credentials_secret_recovery_window_in_days
-  force_delete_without_recovery = var.credentials_secret_force_delete_without_recovery
+  name                    = var.credentials_secret_name
+  name_prefix             = var.credentials_secret_name == null ? local.credentials_secret_name_prefix : null
+  recovery_window_in_days = var.credentials_secret_recovery_window_in_days
 
   tags = merge(var.tags, {
     Name = "${var.name}-credentials"
