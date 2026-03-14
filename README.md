@@ -117,6 +117,40 @@ Deployment is handled in a single pipeline:
 - Target cluster: `openproject-prod-eks`
 - Target namespace/release: `plane-dev`
 
+## Manual Helm Upgrade Runbook (Local)
+
+Important: `helm/plane/values/dev.yaml` is not sufficient by itself for managed services.
+CI injects runtime values for:
+
+- `plane-ce.env.pgdb_remote_url`
+- `plane-ce.env.remote_redis_url`
+- `plane-ce.rabbitmq.external_rabbitmq_url`
+
+For manual/local helm upgrades, add a second values file with these runtime URLs.
+
+1. Create a local override from the example:
+
+```bash
+cp helm/plane/values/dev.runtime.example.yaml helm/plane/values/dev.runtime.local.yaml
+```
+
+2. Fill `helm/plane/values/dev.runtime.local.yaml` with real DB/Redis/RabbitMQ connection URLs.
+
+3. Run helm upgrade with both files:
+
+```bash
+helm upgrade --install plane-dev helm/plane \
+  --namespace plane-dev \
+  --create-namespace \
+  --values helm/plane/values/dev.yaml \
+  --values helm/plane/values/dev.runtime.local.yaml \
+  --set-string plane-ce.env.docstore_bucket="<docstore-bucket>" \
+  --set-string plane-ce.env.aws_region="eu-west-1" \
+  --set-string plane-ce.env.aws_s3_endpoint_url=""
+```
+
+Without the runtime override file, manual upgrades can fail due to empty managed-service URLs.
+
 ## Plane ALB Routing
 
 Plane path routing is defined by the upstream `plane-ce` ingress template and is applied through this wrapper chart.
@@ -348,9 +382,9 @@ To move this repository closer to production-grade best practices, implement the
    - Add secret rotation policy and runbook.
 
 3. Managed data services migration
-   - PostgreSQL: migrate from in-cluster `pgdb` (EBS PVC) to Amazon RDS PostgreSQL.
-   - RabbitMQ: prefer Amazon MQ for RabbitMQ as the most compatible managed replacement.
-   - Redis: prefer Amazon ElastiCache for Redis for production HA/backup operations.
+   - PostgreSQL: migrated to Amazon RDS PostgreSQL with CI-injected `pgdb_remote_url`.
+   - RabbitMQ: migrated to Amazon MQ for RabbitMQ with CI-injected `external_rabbitmq_url`.
+   - Redis: migrated to Amazon ElastiCache with CI-injected `remote_redis_url`.
    - Note: Amazon SQS is an option only with app-level queue integration changes; it is not a direct RabbitMQ drop-in.
 
 4. DNS and TLS hardening

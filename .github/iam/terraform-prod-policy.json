@@ -12,6 +12,10 @@
         "iam:List*",
         "rds:Describe*",
         "rds:ListTagsForResource",
+        "mq:Describe*",
+        "mq:List*",
+        "elasticache:Describe*",
+        "elasticache:ListTagsForResource",
         "secretsmanager:Describe*",
         "secretsmanager:GetResourcePolicy",
         "autoscaling:Describe*",
@@ -123,6 +127,83 @@
         "dynamodb:UpdateItem"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "TerraformAmazonMqCreateWrite",
+      "Effect": "Allow",
+      "Action": [
+        "mq:CreateBroker"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "openproject",
+          "aws:RequestTag/Environment": "prod",
+          "aws:RequestTag/ManagedBy": "terraform"
+        }
+      }
+    },
+    {
+      "Sid": "TerraformAmazonMqScopedWrite",
+      "Effect": "Allow",
+      "Action": [
+        "mq:DeleteBroker",
+        "mq:UpdateBroker",
+        "mq:RebootBroker",
+        "mq:CreateTags",
+        "mq:RemoveTags"
+      ],
+      "Resource": [
+        "arn:aws:mq:eu-west-1:211125458668:broker:openproject-prod-rabbitmq:*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "openproject",
+          "aws:ResourceTag/Environment": "prod",
+          "aws:ResourceTag/ManagedBy": "terraform"
+        }
+      }
+    },
+    {
+      "Sid": "TerraformElastiCacheCreateWrite",
+      "Effect": "Allow",
+      "Action": [
+        "elasticache:CreateCacheSubnetGroup",
+        "elasticache:CreateReplicationGroup"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "openproject",
+          "aws:RequestTag/Environment": "prod",
+          "aws:RequestTag/ManagedBy": "terraform"
+        }
+      }
+    },
+    {
+      "Sid": "TerraformElastiCacheScopedWrite",
+      "Effect": "Allow",
+      "Action": [
+        "elasticache:DeleteCacheSubnetGroup",
+        "elasticache:ModifyCacheSubnetGroup",
+        "elasticache:ModifyReplicationGroup",
+        "elasticache:DeleteReplicationGroup",
+        "elasticache:IncreaseReplicaCount",
+        "elasticache:DecreaseReplicaCount",
+        "elasticache:AddTagsToResource",
+        "elasticache:RemoveTagsFromResource"
+      ],
+      "Resource": [
+        "arn:aws:elasticache:eu-west-1:211125458668:subnetgroup:openproject-prod-redis-subnet-group",
+        "arn:aws:elasticache:eu-west-1:211125458668:replicationgroup:openproject-prod-redis"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "openproject",
+          "aws:ResourceTag/Environment": "prod",
+          "aws:ResourceTag/ManagedBy": "terraform"
+        }
+      }
     },
     {
       "Sid": "AllowPassOnlyEksRolesToEksService",

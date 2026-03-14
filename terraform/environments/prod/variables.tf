@@ -249,6 +249,100 @@ variable "rds_allowed_cidr_blocks" {
   default     = ["172.26.0.0/16"]
 }
 
+variable "rabbitmq_allowed_cidr_blocks" {
+  description = "CIDR blocks allowed to reach Amazon MQ RabbitMQ on port 5671"
+  type        = list(string)
+  default     = ["172.26.0.0/16"]
+}
+
+variable "rabbitmq_engine_version" {
+  description = "Amazon MQ RabbitMQ engine version"
+  type        = string
+  default     = "3.13"
+}
+
+variable "rabbitmq_host_instance_type" {
+  description = "Amazon MQ broker instance type"
+  type        = string
+  default     = "mq.t3.micro"
+}
+
+variable "rabbitmq_deployment_mode" {
+  description = "Amazon MQ deployment mode"
+  type        = string
+  default     = "SINGLE_INSTANCE"
+}
+
+variable "rabbitmq_publicly_accessible" {
+  description = "Whether Amazon MQ broker is publicly accessible"
+  type        = bool
+  default     = false
+}
+
+variable "rabbitmq_auto_minor_version_upgrade" {
+  description = "Automatically upgrade RabbitMQ minor versions in maintenance windows"
+  type        = bool
+  default     = true
+}
+
+variable "rabbitmq_username" {
+  description = "RabbitMQ username"
+  type        = string
+  default     = "plane"
+}
+
+variable "rabbitmq_password" {
+  description = "Optional RabbitMQ password override"
+  type        = string
+  sensitive   = true
+  default     = null
+  nullable    = true
+}
+
+variable "redis_allowed_cidr_blocks" {
+  description = "CIDR blocks allowed to reach Redis on port 6379"
+  type        = list(string)
+  default     = ["172.26.0.0/16"]
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache node type"
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_engine_version" {
+  description = "ElastiCache Redis engine version"
+  type        = string
+  default     = "7.1"
+}
+
+variable "redis_port" {
+  description = "Redis port"
+  type        = number
+  default     = 6379
+}
+
+variable "redis_num_cache_clusters" {
+  description = "Number of cache clusters in Redis replication group"
+  type        = number
+  default     = 1
+}
+
+variable "redis_apply_immediately" {
+  description = "Whether Redis changes are applied immediately"
+  type        = bool
+  default     = false
+}
+
+variable "redis_auth_token" {
+  description = "Optional Redis AUTH token override"
+  type        = string
+  sensitive   = true
+  default     = null
+  nullable    = true
+}
+
 variable "plane_namespace" {
   description = "Kubernetes namespace where Plane is deployed"
   type        = string

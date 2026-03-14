@@ -1,0 +1,12 @@
+# Example local runtime overrides for manual helm upgrades.
+plane-ce:
+  postgres:
+    local_setup: false
+  redis:
+    local_setup: false
+  rabbitmq:
+    local_setup: false
+    external_rabbitmq_url: "amqps://<rabbit_user>:<rabbit_password>@<rabbit_host>:5671/"
+  env:
+    pgdb_remote_url: "postgresql://<db_user>:<db_password>@<db_host>:5432/<db_name>"
+    remote_redis_url: "rediss://:<redis_auth_token>@<redis_host>:6379/0"

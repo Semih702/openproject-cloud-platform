@@ -23,18 +23,23 @@ plane-ce:
     doc_store_existingSecret: plane-dev-doc-store-secrets
 
   postgres:
-    storageClass: gp3-csi
+    local_setup: false
 
   redis:
-    storageClass: gp3-csi
+    local_setup: false
 
   rabbitmq:
-    storageClass: gp3-csi
+    local_setup: false
+    external_rabbitmq_url: ""
 
   minio:
     local_setup: false
 
   env:
+    # Set by CI from Terraform RDS output.
+    pgdb_remote_url: ""
+    # Set by CI from Terraform ElastiCache output.
+    remote_redis_url: ""
     docstore_bucket: "plane-dev-uploads"
     aws_region: "eu-west-1"
     aws_s3_endpoint_url: ""
