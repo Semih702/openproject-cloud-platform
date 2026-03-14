@@ -8,3 +8,6 @@ kubeconfig-openproject
 *.tfstate
 *.tfstate.*
 crash.log
+
+# local runtime overrides with sensitive connection URLs
+helm/plane/values/dev.runtime.local.yaml
